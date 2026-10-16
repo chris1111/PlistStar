@@ -2,7 +2,8 @@
 
 <div align="center">
 
-# ⭐ PlistStar
+# PlistStar 
+### Open ➤ [PlistStar](https://chris1111.github.io/PlistStar/)
 
 **A polished, dependency-free editor for macOS `.plist` files — packed into a single HTML file.**
 
