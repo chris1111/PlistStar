@@ -28,9 +28,8 @@ open, edit, validate and export from any browser. No install, no server, no tele
 
 ## 🚀 Getting started
 
-1. Download **PlistStar.html**
-2. Double-click it — it opens in your default browser
-3. Edit your plist, then hit **⌘S / Ctrl+S** to export
+1. Open ➤ [PlistStar](https://chris1111.github.io/PlistStar/)
+2. Edit your plist, then hit **⌘S / Ctrl+S** to export
 
 > 💡 You can also simply **drag & drop** any `.plist` file onto the page to open it.
 
