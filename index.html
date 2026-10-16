@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlistStar — macOS plist editor</title>
+<meta name="description" content="PlistStar — a macOS .plist editor that runs entirely in your browser. Structured tree editing, live XML source, OpenCore & Clover defaults in one click. One HTML file, zero installs.">
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4.4' y='4.4' width='15.2' height='15.2' rx='3.2' transform='rotate(45 12 12)' fill='%233b8ff0'/><path d='M12 5.2 13.7 9.65 18.47 9.9 14.76 12.9 16 17.5 12 14.9 8 17.5 9.24 12.9 5.53 9.9 10.3 9.65Z' fill='%23dfe7f2'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: dark;
+  /* dark blue-grey theme */
+  --bg:#12161d; --panel:#161c25; --panel2:#1c2430; --raise:#232d3b;
+  --line:#2a3546; --line-soft:#222b38;
+  --text:#e4eaf3; --muted:#8b98ab; --faint:#5d6b80;
+  --accent:#4da3ff; --accent-soft:rgba(77,163,255,.13); --accent-line:rgba(77,163,255,.45);
+  --danger:#ef6f61;
+  --t-string:#93d17c; --t-integer:#e6b566; --t-real:#5cc6d6; --t-boolean:#f28273;
+  --t-date:#b0a7f2; --t-data:#f092b8; --t-dict:#e0a668; --t-array:#8fb8d8;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
+  --ui:'Space Grotesk',system-ui,sans-serif;
+  --row-h:34px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:400 13px/1.45 var(--ui);
+  display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+body::after{content:'';position:fixed;inset:0;z-index:500;pointer-events:none;opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+::selection{background:rgba(77,163,255,.28)}
+button{font-family:var(--ui)}
+.spacer{flex:1}
+.vsep{width:1px;height:18px;background:var(--line);margin:0 2px}
+.ic{display:block}
+
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-thumb{background:#2c3a4d;border-radius:6px;border:2px solid var(--bg)}
+*::-webkit-scrollbar-thumb:hover{background:#3a4a61}
+*::-webkit-scrollbar-corner{background:transparent}
+
+/* ---------- app bar ---------- */
+#appbar{height:50px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;
+  background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;user-select:none}
+.brand-mark{display:grid;place-items:center;line-height:0}
+.brand-mark .dia{transform-box:fill-box;transform-origin:50% 50%;
+  transition:transform .55s cubic-bezier(.2,.8,.3,1.3)}
+.brand:hover .brand-mark .dia{transform:rotate(45deg)}   /* diamond turns, star stays put */
+.brand-name{font-size:14.5px;font-weight:600;letter-spacing:.01em}
+.brand-name b{color:var(--accent);font-weight:600}
+.doc-chip{display:flex;align-items:center;gap:8px;padding:4px 10px;background:var(--bg);
+  border:1px solid var(--line);border-radius:6px;font-family:var(--mono);font-size:12px}
+#fileName{outline:none;min-width:30px;padding:1px 4px;border-radius:4px;white-space:nowrap}
+#fileName:focus{background:var(--raise);box-shadow:inset 0 0 0 1px var(--accent-line)}
+#dirtyDot{width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:0;transition:opacity .2s;flex:none}
+#dirtyDot.on{opacity:1}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:6px;
+  border:1px solid var(--line);background:transparent;color:var(--text);font:500 12px var(--ui);
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;white-space:nowrap}
+.btn:hover{background:var(--panel2);border-color:#3a4a5e}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:default;transform:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#07182c;font-weight:600}
+.btn.primary:hover{background:#6cb4ff}
+.btn.icon-btn{width:30px;padding:0;justify-content:center}
+.btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.btn .caret svg{transition:transform .15s;transform:rotate(90deg)}
+.btn.menu-open .caret svg{transform:rotate(270deg)}
+
+/* ---------- split ---------- */
+#split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(340px,1fr) 7px minmax(280px,var(--xmlw,46%))}
+#split.nopane{grid-template-columns:1fr 0 0}
+#split.nopane #divider,#split.nopane #xmlPane{display:none}
+#divider{position:relative;cursor:col-resize}
+#divider::after{content:'';position:absolute;left:3px;top:0;bottom:0;width:1px;background:var(--line);transition:background .12s}
+#divider:hover::after,#divider.drag::after{background:var(--accent-line)}
+body.col-resize{cursor:col-resize;user-select:none}
+
+/* ---------- panes ---------- */
+#treePane,#xmlPane{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+.pane-head{height:40px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px;
+  background:var(--panel);border-bottom:1px solid var(--line)}
+.pane-label{font-size:10.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.pane-meta{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+#searchWrap{position:relative;display:flex;align-items:center}
+#searchWrap [data-icon]{position:absolute;left:8px;display:flex;color:var(--faint);pointer-events:none}
+#search{width:180px;height:26px;background:var(--bg);border:1px solid var(--line);border-radius:6px;
+  padding:0 8px 0 27px;font:400 11.5px var(--mono);color:var(--text);outline:none;
+  transition:width .2s,border-color .2s}
+#search:focus{width:240px;border-color:var(--accent-line)}
+@media (max-width:1250px){#codeMeta{display:none}}
+
+/* ---------- about card (top-left) ---------- */
+#aboutCard{margin:14px 14px 4px;flex:none;background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:12px;padding:13px 15px 12px;position:relative;
+  animation:acIn .3s ease}
+@keyframes acIn{from{opacity:0;transform:translateY(-6px)}}
+.ac-head{display:flex;align-items:center;gap:9px}
+.ac-mark{display:grid;place-items:center;line-height:0;flex:none}
+.ac-head b{font:600 13.5px var(--ui);color:var(--text)}
+.ac-chip{font:500 9px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:9px;padding:1px 8px}
+/* GitHub repo badge — same chip style, clickable */
+.ac-badge{display:inline-flex;align-items:center;gap:5px;font:500 10px var(--mono);letter-spacing:.03em;
+  color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);
+  border-radius:9px;padding:2px 9px 2px 7px;text-decoration:none;vertical-align:middle;
+  transition:background .12s,border-color .12s,color .12s}
+.ac-badge:hover{background:rgba(77,163,255,.24);border-color:var(--accent);color:#8cc5ff}
+.ac-badge svg{flex:none}
+.ac-x{margin-left:auto;width:22px;height:22px;display:grid;place-items:center;background:none;border:none;
+  border-radius:5px;color:var(--faint);cursor:pointer;padding:0}
+.ac-x:hover{background:var(--raise);color:var(--text)}
+#aboutCard p{margin:8px 0 0;font-size:12px;line-height:1.55;color:var(--muted)}
+#aboutCard p b{color:var(--text);font-weight:600}
+#aboutCard p code{font:500 11px var(--mono);color:var(--accent);background:var(--accent-soft);
+  border-radius:4px;padding:0 4px}
+.ac-foot{margin-top:10px!important;padding-top:9px;border-top:1px solid var(--line-soft);
+  font:400 10px var(--mono)!important;color:var(--faint)!important}
+
+/* ---------- tree rows ---------- */
+#treeScroll{flex:1;overflow:auto;position:relative}
+#tree{min-width:600px;padding:6px 0 30vh}
+.row{display:grid;grid-template-columns:22px minmax(130px,3fr) 88px minmax(190px,7fr) auto;
+  height:var(--row-h);align-items:center;position:relative}
+.row:hover{background:rgba(255,255,255,.03)}
+.row.sel{background:var(--accent-soft)}
+.row.sel::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent)}
+.row.reveal{animation:rowIn .38s cubic-bezier(.2,.7,.3,1) both}
+@keyframes rowIn{from{opacity:0;transform:translateX(-10px)}}
+.disc{width:22px;height:100%;display:grid;place-items:center;background:none;border:none;
+  color:var(--muted);cursor:pointer;padding:0}
+.disc:hover{color:var(--text)}
+.disc .ic{transition:transform .15s}
+.disc.open .ic{transform:rotate(90deg)}
+.leafdot{width:3px;height:3px;border-radius:50%;background:var(--faint);opacity:.55}
+.keycell{position:relative;height:100%;display:flex;align-items:center;min-width:0;padding-right:8px}
+.guide{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.05);transition:background .12s}
+.row:hover .guide,.row.sel .guide{background:rgba(255,255,255,.12)}
+.keyinput{flex:1;width:100%;min-width:0;background:transparent;border:none;outline:none;
+  color:var(--text);font:500 12px var(--mono);padding:4px 6px;border-radius:4px}
+.keyinput:focus{background:var(--raise);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.keyinput::placeholder{color:var(--faint)}
+.rootlabel{font:600 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding-left:2px}
+.idxchip{font:400 10px var(--mono);color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;flex:none}
+.typebadge{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:10px;
+  background:transparent;border:1px solid transparent;font:500 10px var(--mono);letter-spacing:.05em;
+  color:var(--c,var(--muted));cursor:pointer;justify-self:start;transition:background .12s,border-color .12s}
+.typebadge .dot{width:6px;height:6px;border-radius:2px;background:var(--c,var(--muted));flex:none}
+.typebadge:hover{background:var(--panel2);border-color:var(--line)}
+.t-string{--c:var(--t-string)} .t-integer{--c:var(--t-integer)} .t-real{--c:var(--t-real)}
+.t-boolean{--c:var(--t-boolean)} .t-date{--c:var(--t-date)} .t-data{--c:var(--t-data)}
+.t-dict{--c:var(--t-dict)} .t-array{--c:var(--t-array)}
+.valcell{display:flex;align-items:center;gap:10px;min-width:0;height:100%;padding-right:10px}
+.valinput{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);
+  font:400 12px var(--mono);padding:4px 6px;border-radius:4px}
+.valinput:focus{background:var(--raise);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.valinput.bad{box-shadow:inset 0 0 0 1px var(--danger)}
+.valinput::placeholder{color:var(--faint)}
+.valinput.num{max-width:180px}
+.c-int{color:var(--t-integer)} .c-real{color:var(--t-real)} .c-date{color:var(--t-date)} .c-data{color:var(--t-data)}
+input[type="datetime-local"].valinput{max-width:220px}
+.hint{font:400 10px var(--mono);color:var(--faint);flex:none}
+.summary{background:none;border:none;color:var(--faint);font:400 11px var(--mono);cursor:pointer;
+  padding:4px 7px;border-radius:4px;transition:color .12s}
+.summary:hover{color:var(--text);background:var(--panel2)}
+.summary .cnt{color:var(--muted)}
+
+.boollabel{font:500 11.5px var(--mono);min-width:38px;cursor:pointer;user-select:none}
+.boollabel.on{color:var(--t-string)} .boollabel.off{color:var(--t-boolean)}
+.switch{width:36px;height:20px;flex:none;border-radius:10px;background:var(--raise);
+  border:1px solid var(--line);position:relative;cursor:pointer;transition:background .15s,border-color .15s;padding:0}
+.switch::after{content:'';position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;
+  background:var(--muted);transition:left .15s,background .15s}
+.switch.on{background:rgba(147,209,124,.24);border-color:rgba(147,209,124,.5)}
+.switch.on::after{left:19px;background:var(--t-string)}
+.rowacts{display:flex;align-items:center;gap:1px;padding-right:8px;opacity:0;transition:opacity .12s}
+.row:hover .rowacts,.row.sel .rowacts{opacity:1}
+.rab{width:22px;height:22px;display:grid;place-items:center;background:none;border:none;
+  border-radius:4px;color:var(--faint);cursor:pointer;padding:0}
+.rab:hover{background:var(--raise);color:var(--text)}
+.rab.danger:hover{color:var(--danger)}
+
+/* ---------- empty / welcome card ---------- */
+#emptyRoot{margin:16px auto 30px;width:min(460px,90%);border:1px dashed var(--line);border-radius:12px;
+  padding:22px 20px;text-align:center;color:var(--muted)}
+#emptyRoot .er-title{font:600 14px var(--ui);color:var(--text);margin-bottom:4px}
+#emptyRoot>p{margin:0 0 16px;font-size:12px}
+.tpl-heading{font:600 10.5px var(--ui);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.tpl-stack{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;text-align:left}
+.tpl-row{display:flex;align-items:stretch;background:var(--panel2);border:1px solid var(--line);
+  border-radius:9px;transition:border-color .12s,background .12s}
+.tpl-row:hover{border-color:var(--accent-line);background:var(--raise)}
+.tpl-main{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:8px 4px 8px 9px;
+  background:none;border:none;color:inherit;cursor:pointer;text-align:left}
+/* project-logo badge: real logo, text fallback if it can't load */
+.tpl-logo{width:38px;height:38px;flex:none;position:relative;display:grid;place-items:center;
+  border-radius:9px;background:linear-gradient(145deg,var(--raise),var(--panel2));
+  border:1px solid var(--line);padding:5px;overflow:hidden}
+.tpl-logo img{width:100%;height:100%;object-fit:contain;display:block;transition:opacity .15s}
+.tpl-logo.loading img{opacity:.15}
+.tpl-logo.loading::after{content:'';position:absolute;width:16px;height:16px;
+  border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;
+  animation:rot .7s linear infinite}
+.tpl-badge{width:100%;height:100%;display:grid;place-items:center;
+  font:700 11px var(--mono);letter-spacing:.04em}
+.tpl-badge.oc{color:var(--accent)}
+.tpl-badge.cl{color:var(--t-array)}
+.tpl-text{display:flex;flex-direction:column;min-width:0}
+.tpl-text b{font:600 12.5px var(--ui);color:var(--text)}
+.tpl-text small{font:400 10px var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tpl-gh{flex:none;display:grid;place-items:center;padding:0 10px;color:var(--faint);
+  border-left:1px solid var(--line-soft);transition:color .12s,background .12s}
+.tpl-gh:hover{color:var(--text);background:var(--panel)}
+#emptyRoot .er-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+#emptyRoot .er-alt{display:block;margin-top:14px;font:400 10.5px var(--mono);color:var(--faint)}
+#noResults{margin:44px auto;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px}
+#noResults button{margin-left:10px}
+
+/* ---------- right pane: Source (default) + Preview ---------- */
+.tabs{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px;gap:2px}
+.tabs button{height:22px;padding:0 11px;border:none;background:transparent;color:var(--muted);
+  font:500 11px var(--ui);border-radius:4px;cursor:pointer}
+.tabs button.active{background:var(--raise);color:var(--text)}
+.tabview{display:none}
+#codeScroll{overflow:auto;background:var(--panel)}
+#codeScroll.active{display:block;flex:1;min-height:0}
+#codeLines{padding:10px 0 40px;width:max-content;min-width:100%;
+  font:400 11.5px/1.6 var(--mono);tab-size:4;-moz-tab-size:4}
+#codeScroll.wrap #codeLines{width:auto}
+.cl{display:flex;align-items:flex-start;min-height:1.6em;transition:background .5s ease}
+.cl:hover{background:rgba(255,255,255,.03)}
+.cl.rowhl{background:var(--accent-soft)}
+.cl.rowhl .ln{color:var(--accent)}
+.ln{flex:none;width:48px;padding-right:12px;text-align:right;color:#4e5d73;background:#141a23;
+  border-right:1px solid var(--line-soft);position:sticky;left:0;z-index:1;user-select:none}
+.lc{flex:1;min-width:0;white-space:pre;padding:0 28px 0 14px;color:var(--text)}
+#codeScroll.wrap .lc{white-space:pre-wrap;word-break:break-all;padding-left:26px;text-indent:-12px}
+#sourceWrap{flex-direction:column;position:relative}
+#sourceWrap.active{display:flex;flex:1;min-height:0}
+#sourceArea{flex:1;width:100%;background:var(--panel);border:none;outline:none;resize:none;
+  padding:12px 16px;font:400 11.5px/1.65 var(--mono);color:var(--text);tab-size:4;-moz-tab-size:4}
+#srcMark{position:absolute;left:0;width:3px;background:var(--accent);border-radius:0 2px 2px 0;
+  box-shadow:0 0 8px rgba(77,163,255,.55);opacity:0;transition:opacity .4s;pointer-events:none;z-index:2}
+#sourceArea.shake{animation:shake .35s}
+@keyframes shake{20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+.tok-punc{color:#55637a} .tok-tag{color:#7fb2e8} .tok-attr{color:#58c0c0}
+.tok-decl{color:#55606f} .tok-com{color:#55606f;font-style:italic}
+.tok-key{color:#e0a668} .tok-str{color:#93d17c} .tok-num{color:#e6b566}
+.tok-date{color:#b0a7f2} .tok-data{color:#f092b8}
+
+/* ---------- status bar / footer ---------- */
+#statusbar{height:28px;flex:none;display:flex;align-items:center;gap:14px;padding:0 14px;
+  background:var(--panel);border-top:1px solid var(--line);font:400 10.5px var(--mono);color:var(--muted)}
+#crumbs{display:flex;align-items:center;min-width:0;overflow:hidden;white-space:nowrap}
+.crumb{padding:2px 5px;border-radius:4px;cursor:pointer}
+.crumb:hover{background:var(--panel2);color:var(--text)}
+.crumb.current{color:var(--accent);cursor:default}
+.crumb-sep{color:var(--faint)}
+#statRight{white-space:nowrap}
+#copyright{color:var(--faint);white-space:nowrap}
+#statKeys{color:var(--faint);white-space:nowrap}
+@media (max-width:1100px){#statKeys{display:none}}
+
+/* ---------- menus ---------- */
+#typeMenu,#newMenu{position:fixed;z-index:300;background:var(--panel2);border:1px solid var(--line);
+  border-radius:8px;padding:4px;min-width:170px;box-shadow:0 10px 28px rgba(0,0,0,.5);
+  animation:menuIn .12s ease;transform-origin:top left}
+@keyframes menuIn{from{opacity:0;transform:scale(.95)}}
+#typeMenu button,#newMenu button{display:flex;align-items:center;gap:9px;width:100%;padding:6px 10px;background:none;
+  border:none;border-radius:5px;color:var(--text);font:500 11.5px var(--mono);cursor:pointer;text-align:left}
+#typeMenu button:hover,#newMenu button:hover{background:var(--raise)}
+#typeMenu .dot{width:7px;height:7px;border-radius:2px;flex:none}
+#newMenu .nm-logo{width:18px;height:18px;flex:none;display:grid;place-items:center}
+#newMenu .nm-logo img{width:100%;height:100%;object-fit:contain}
+#newMenu .ic{color:var(--muted)}
+#newMenu button:hover .ic{color:var(--accent)}
+#newMenu .nm-sub{margin-left:auto;font:400 9.5px var(--mono);color:var(--faint)}
+
+/* ---------- toasts ---------- */
+#toasts{position:fixed;bottom:42px;left:50%;transform:translateX(-50%);z-index:400;
+  display:flex;flex-direction:column;align-items:center;gap:8px}
+.toast{display:flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--text);padding:8px 14px;border-radius:8px;font:500 12px var(--ui);
+  box-shadow:0 10px 28px rgba(0,0,0,.45);animation:toastIn .18s ease}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}}
+.toast.out{opacity:0;transform:translateY(6px);transition:all .2s}
+.toast .ic{color:var(--t-string)}
+.toast.t-err .ic{color:var(--danger)}
+.toast.t-warn .ic{color:var(--accent)}
+.toast .tact{background:none;border:none;color:var(--accent);font:600 11.5px var(--ui);
+  cursor:pointer;padding:2px 4px;text-decoration:underline;text-underline-offset:3px}
+
+/* ---------- drop overlay ---------- */
+#dropOverlay{position:fixed;inset:0;z-index:350;background:rgba(18,22,29,.88);
+  display:none;place-items:center;backdrop-filter:blur(2px)}
+#dropOverlay.on{display:grid}
+#dropInner{border:1.5px dashed var(--accent-line);border-radius:14px;padding:46px 70px;
+  text-align:center;color:var(--text)}
+#dropInner .ic{margin:0 auto 14px;color:var(--accent)}
+#dropInner .d1{font:600 16px var(--ui)}
+#dropInner .d2{font:400 11.5px var(--mono);color:var(--muted);margin-top:6px}
+
+:focus-visible{outline:1px solid var(--accent-line);outline-offset:1px}
+.valinput:focus-visible,.keyinput:focus-visible,#search:focus-visible,#sourceArea:focus-visible,#fileName:focus-visible{outline:none}
+</style>
+</head>
+<body>
+
+<header id="appbar">
+  <div class="brand">
+    <span class="brand-mark">
+      <svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="diaG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#63b3ff"/><stop offset="1" stop-color="#2e7fd8"/>
+          </linearGradient>
+          <linearGradient id="starG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f4f7fc"/><stop offset=".5" stop-color="#b9c4d4"/>
+            <stop offset=".62" stop-color="#8e9cb0"/><stop offset="1" stop-color="#dbe3ee"/>
+          </linearGradient>
+        </defs>
+        <g class="dia"><rect x="4.4" y="4.4" width="15.2" height="15.2" rx="3.2"
+             transform="rotate(45 12 12)" fill="url(#diaG)"/></g>
+        <path d="M12 5.2 13.7 9.65 18.47 9.9 14.76 12.9 16 17.5 12 14.9 8 17.5 9.24 12.9 5.53 9.9 10.3 9.65Z"
+              fill="url(#starG)"/>
+      </svg>
+    </span>
+    <span class="brand-name">plist<b>star</b></span>
+  </div>
+  <div class="doc-chip">
+    <span id="fileName" contenteditable="true" spellcheck="false" title="Click to rename the file"></span>
+    <span id="dirtyDot" title="Unsaved changes"></span>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="btnNew" data-icon="file" title="New plist — empty, or from a bootloader template">New<span class="caret" data-icon="chev"></span></button>
+  <button class="btn" id="btnOpen" data-icon="upload" title="Open a .plist file">Open</button>
+  <button class="btn" id="btnCopy" data-icon="copy" title="Copy the XML to the clipboard">Copy XML</button>
+  <button class="btn primary" id="btnExport" data-icon="download" title="Export .plist  (⌘S)">Export</button>
+  <span class="vsep"></span>
+  <button class="btn icon-btn active" id="btnPane" data-icon="code" title="Toggle XML pane  (⌘E)"></button>
+</header>
+
+<main id="split">
+  <!-- ======== structure tree ======== -->
+  <section id="treePane">
+    <div class="pane-head">
+      <span class="pane-label">Structure</span>
+      <span class="pane-meta" id="nodeCount"></span>
+      <div class="spacer"></div>
+      <button class="btn icon-btn" id="btnAbout" data-icon="info" title="About PlistStar"></button>
+      <button class="btn icon-btn" id="btnAddRoot" data-icon="plus" title="Add an entry (to the selected container, or root)"></button>
+      <div id="searchWrap">
+        <span data-icon="search"></span>
+        <input id="search" placeholder="Filter keys & values…" spellcheck="false">
+      </div>
+    </div>
+    <div id="treeScroll">
+
+      <!-- about card: brief description, visible on load (ⓘ toggles, × hides for the session) -->
+      <div id="aboutCard">
+        <div class="ac-head">
+          <span class="ac-mark">
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+              <defs>
+                <linearGradient id="diaG2" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#63b3ff"/><stop offset="1" stop-color="#2e7fd8"/>
+                </linearGradient>
+                <linearGradient id="starG2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#f4f7fc"/><stop offset=".5" stop-color="#b9c4d4"/>
+                  <stop offset=".62" stop-color="#8e9cb0"/><stop offset="1" stop-color="#dbe3ee"/>
+                </linearGradient>
+              </defs>
+              <rect x="4.4" y="4.4" width="15.2" height="15.2" rx="3.2"
+                    transform="rotate(45 12 12)" fill="url(#diaG2)"/>
+              <path d="M12 5.2 13.7 9.65 18.47 9.9 14.76 12.9 16 17.5 12 14.9 8 17.5 9.24 12.9 5.53 9.9 10.3 9.65Z"
+                    fill="url(#starG2)"/>
+            </svg>
+          </span>
+          <b>PlistStar</b>
+          <span class="ac-chip">plist editor</span>
+          <button class="ac-x" id="btnAboutClose" title="Hide this card">
+            <svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <p><b>PlistStar</b> — a macOS <code>.plist</code> editor that runs entirely in your browser.
+        Structured tree editing on the left, live XML source on the right; click any key and the
+        source jumps to it. <b>OpenCore</b> &amp; <b>Clover</b> defaults load in one click.
+        One HTML file, zero installs, nothing leaves your machine.</p>
+        <p class="ac-foot">
+          <a class="ac-badge" href="https://github.com/chris1111/PlistStar" target="_blank" rel="noopener"
+             title="Open the PlistStar repository on GitHub">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 2.9-.39c.98 0 1.97.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .31.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            chris1111/PlistStar
+          </a>
+          Copyright © 2026 chris1111 · All Rights Reserved
+        </p>
+      </div>
+
+      <div id="tree"></div>
+      <div id="emptyRoot" hidden>
+        <div class="er-title">Start a new plist</div>
+        <p>Load a bootloader default, open a file, or build from scratch.</p>
+
+        <div class="tpl-heading">Default configs</div>
+        <div class="tpl-stack">
+          <div class="tpl-row">
+            <button class="tpl-main" id="tplOc" title="Download & open OpenCore's Sample.plist">
+              <span class="tpl-logo">
+                <img src="https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Docs/Logos/Logo.png"
+                     alt="OpenCore logo"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+                <span class="tpl-badge oc" style="display:none">OC</span>
+              </span>
+              <span class="tpl-text">
+                <b>OpenCore default config</b>
+                <small>Sample.plist · acidanthera/OpenCorePkg</small>
+              </span>
+            </button>
+            <a class="tpl-gh" id="ghOc" href="https://github.com/acidanthera/OpenCorePkg/blob/master/Docs/Sample.plist" target="_blank" rel="noopener" title="View on GitHub"></a>
+          </div>
+          <div class="tpl-row">
+            <button class="tpl-main" id="tplClover" title="Download & open Clover's config-sample.plist">
+              <span class="tpl-logo">
+                <img src="https://raw.githubusercontent.com/CloverHackyColor/CloverBootloader/master/Logo/Clover-Logo-Default-512x512%401x.svg"
+                     alt="Clover logo"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+                <span class="tpl-badge cl" style="display:none">CL</span>
+              </span>
+              <span class="tpl-text">
+                <b>Clover default config</b>
+                <small>config-sample.plist · CloverHackyColor/CloverBootloader</small>
+              </span>
+            </button>
+            <a class="tpl-gh" id="ghClover" href="https://github.com/CloverHackyColor/CloverBootloader/blob/master/CloverPackage/CloverV2/EFI/CLOVER/config-sample.plist" target="_blank" rel="noopener" title="View on GitHub"></a>
+          </div>
+        </div>
+
+        <div class="er-actions">
+          <button class="btn" id="btnAddFirst" data-icon="plus">Add first entry</button>
+          <button class="btn" id="btnOpen2" data-icon="upload">Open file…</button>
+          <button class="btn" id="btnPasteXml" data-icon="code">Paste XML</button>
+        </div>
+        <span class="er-alt">…or drop a .plist file anywhere · click any key to reveal it in the source</span>
+      </div>
+      <div id="noResults" hidden>No matches for “<span id="noResultsQ"></span>”<button class="btn" id="btnClearSearch">Clear</button></div>
+    </div>
+  </section>
+
+  <div id="divider" title="Drag to resize · double-click to reset"></div>
+
+  <!-- ======== right pane: Source (default) + Preview ======== -->
+  <section id="xmlPane">
+    <div class="pane-head">
+      <div class="tabs" id="tabs">
+        <button data-tab="source" class="active">Source</button>
+        <button data-tab="preview">Preview</button>
+      </div>
+      <div class="spacer"></div>
+      <span class="pane-meta" id="codeMeta"></span>
+      <button class="btn icon-btn" id="btnWrap" data-icon="wrap" title="Toggle soft wrap (Preview only)" hidden></button>
+      <button class="btn" id="btnApplySource" data-icon="check" disabled hidden title="Parse this XML back into the tree">Apply</button>
+      <button class="btn icon-btn" id="btnCopyCode" data-icon="copy" title="Copy XML"></button>
+    </div>
+    <div id="codeScroll" class="tabview wrap">
+      <div id="codeLines"></div>
+    </div>
+    <div id="sourceWrap" class="tabview active">
+      <textarea id="sourceArea" wrap="off" spellcheck="false" placeholder="The plist XML appears here…"></textarea>
+      <i id="srcMark"></i>
+    </div>
+  </section>
+</main>
+
+<footer id="statusbar">
+  <div id="crumbs"></div>
+  <div class="spacer"></div>
+  <span id="statRight"></span>
+  <span id="statKeys">⌘S export · ⌘E pane · ⌘F filter · Alt+↑↓ move · click a key = reveal in source</span>
+  <span id="copyright" title="PlistStar — github.com/chris1111/PlistStar">Copyright © 2026 chris1111 · All Rights Reserved</span>
+</footer>
+
+<div id="typeMenu" hidden></div>
+<div id="newMenu" hidden>
+  <button data-new="empty"><span data-icon="file"></span>Empty plist<span class="nm-sub">dict</span></button>
+  <button data-new="oc">
+    <span class="nm-logo"><img src="https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Docs/Logos/Logo.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span data-icon="download" style="display:none"></span></span>
+    OpenCore Sample.plist<span class="nm-sub">github</span>
+  </button>
+  <button data-new="clover">
+    <span class="nm-logo"><img src="https://raw.githubusercontent.com/CloverHackyColor/CloverBootloader/master/Logo/Clover-Logo-Default-512x512%401x.svg" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span data-icon="download" style="display:none"></span></span>
+    Clover config-sample.plist<span class="nm-sub">github</span>
+  </button>
+</div>
+<div id="toasts"></div>
+<div id="dropOverlay"><div id="dropInner">
+  <span data-icon="upload"></span>
+  <div class="d1">Drop to open</div>
+  <div class="d2">.plist / .xml — parsed locally, nothing leaves your machine</div>
+</div></div>
+<input type="file" id="fileInput" hidden accept=".plist,.xml,text/xml,application/xml,text/plain">
+
+<script>
+'use strict';
+/* ============================================================
+   PlistStar — macOS plist editor
+   Copyright © 2026 chris1111 · All Rights Reserved
+   https://github.com/chris1111/PlistStar
+   ============================================================ */
+/* ============================== helpers ============================== */
+const $ = s => document.querySelector(s);
+const escH = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fmtBytes = n => n < 1024 ? n + ' B' : (n/1024).toFixed(1) + ' KB';
+const b64Bytes = s => { s = String(s).replace(/\s+/g,''); const p = (s.match(/=+$/)||[''])[0].length;
+  return Math.max(0, Math.floor(s.length*3/4) - p); };
+function b64encode(str){
+  const bytes = new TextEncoder().encode(str); let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+const TYPES = ['string','integer','real','boolean','date','data','array','dict'];
+
+const ICONS = {
+  chev:'<polyline points="9 18 15 12 9 6"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  sub:'<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+  trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  code:'<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  wrap:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="11" y2="12"/><polyline points="14 9 17 12 14 15"/><line x1="3" y1="18" x2="21" y2="18"/>',
+  up:'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+  down:'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'
+};
+const icon = (n, s=14) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
+const GH_SVG = '<svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 2.9-.39c.98 0 1.97.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .31.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>';
+document.querySelectorAll('[data-icon]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, 13)));
+ $('#ghOc').innerHTML = GH_SVG;
+ $('#ghClover').innerHTML = GH_SVG;
+
+/* ============================== plist model ============================== */
+let idSeq = 1;
+function assignIds(n){ n._id = idSeq++; if (n.children) n.children.forEach(c => assignIds(n.type==='dict' ? c.value : c)); }
+function countNodes(n){ let c = 1; if (n.children) n.children.forEach(x => c += countNodes(n.type==='dict' ? x.value : x)); return c; }
+function cloneNode(n){
+  const c = { type:n.type, value:n.value };
+  if (n.children) c.children = n.children.map(k => n.type==='dict'
+    ? { key:k.key, value:cloneNode(k.value) } : cloneNode(k));
+  return c;
+}
+function uniqueKey(parent, base){
+  const keys = new Set(parent.children.map(c => c.key));
+  if (!keys.has(base)) return base;
+  let i = 2; while (keys.has(base + ' ' + i)) i++;
+  return base + ' ' + i;
+}
+
+/* ---------- dates ---------- */
+const stripMs = s => s.replace(/\.\d{3}Z$/, 'Z');
+function normalizeDate(s){
+  const d = new Date(s);
+  return isNaN(d) ? stripMs(new Date().toISOString()) : stripMs(d.toISOString());
+}
+function isoToLocalInput(iso){
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function localInputToISO(v){
+  if (!v) return normalizeDate(new Date().toISOString());
+  if (v.length === 16) v += ':00';
+  return normalizeDate(v + 'Z');
+}
+
+/* ---------- XML → tree ---------- */
+function xmlToNode(el){
+  switch (el.nodeName){
+    case 'dict': {
+      const kids = [...el.children];
+      if (kids.length % 2) throw new Error('<dict> has an odd number of children');
+      const children = [];
+      for (let i = 0; i < kids.length; i += 2){
+        if (kids[i].nodeName !== 'key') throw new Error('Expected <key> inside <dict>');
+        children.push({ key: kids[i].textContent, value: xmlToNode(kids[i+1]) });
+      }
+      return { type:'dict', children };
+    }
+    case 'array':   return { type:'array', children: [...el.children].map(xmlToNode) };
+    case 'string':  return { type:'string', value: el.textContent };
+    case 'integer': return { type:'integer', value: parseInt(el.textContent.trim(), 10) || 0 };
+    case 'real':    return { type:'real', value: parseFloat(el.textContent.trim()) || 0 };
+    case 'true':    return { type:'boolean', value: true };
+    case 'false':   return { type:'boolean', value: false };
+    case 'date':    return { type:'date', value: normalizeDate(el.textContent.trim()) };
+    case 'data':    return { type:'data', value: el.textContent.replace(/\s+/g,'') };
+    default: throw new Error('Unsupported plist element: <' + el.nodeName + '>');
+  }
+}
+function parsePlist(text){
+  const cleaned = String(text).replace(/^\uFEFF/, '').replace(/^\s+/, '');
+  const dom = new DOMParser().parseFromString(cleaned, 'application/xml');
+  const err = dom.querySelector('parsererror');
+  if (err) throw new Error('Malformed XML — ' + err.textContent.trim().split('\n').pop().slice(0,120));
+  let rootEl = dom.documentElement;
+  if (!rootEl) throw new Error('The document is empty');
+  if (rootEl.nodeName === 'plist'){
+    const first = [...rootEl.children].find(n => n.nodeType === 1);
+    if (!first) throw new Error('The plist document is empty');
+    rootEl = first;
+  } else if (!['dict','array','string','integer','real','true','false','date','data'].includes(rootEl.nodeName)){
+    throw new Error('Not a property list — root element is <' + rootEl.nodeName + '>');
+  }
+  return xmlToNode(rootEl);
+}
+
+/* ---------- tree → XML (Apple-standard tab formatting) ---------- */
+function serNode(n, ind){
+  const pad = '\t'.repeat(ind), inner = '\t'.repeat(ind + 1);
+  switch (n.type){
+    case 'dict': {
+      if (!n.children.length) return pad + '<dict/>';
+      let s = pad + '<dict>\n';
+      for (const c of n.children)
+        s += inner + '<key>' + escH(c.key ?? '') + '</key>\n' + serNode(c.value, ind+1) + '\n';
+      return s + pad + '</dict>';
+    }
+    case 'array': {
+      if (!n.children.length) return pad + '<array/>';
+      let s = pad + '<array>\n';
+      for (const c of n.children) s += serNode(c, ind+1) + '\n';
+      return s + pad + '</array>';
+    }
+    case 'string':  return pad + '<string>' + escH(n.value ?? '') + '</string>';
+    case 'integer': return pad + '<integer>' + (Number.isInteger(n.value) ? n.value : (parseInt(n.value,10) || 0)) + '</integer>';
+    case 'real': {
+      const v = typeof n.value === 'number' ? n.value : (parseFloat(n.value) || 0);
+      let s = String(v); if (!/[.eE]/.test(s)) s += '.0';
+      return pad + '<real>' + s + '</real>';
+    }
+    case 'boolean': return pad + (n.value ? '<true/>' : '<false/>');
+    case 'date':    return pad + '<date>' + escH(n.value) + '</date>';
+    case 'data':    return pad + '<data>' + escH(n.value ?? '') + '</data>';
+  }
+}
+function buildXML(){
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+    + '<plist version="1.0">\n' + serNode(doc.root, 0) + '\n</plist>\n';
+}
+function computeXML(){ try { return buildXML(); } catch { return null; } }
+
+/* ---------- node → source-line map (mirrors the serializer's layout) ---------- */
+function buildLineMap(){
+  const map = new Map();
+  if (!doc.root) return map;
+  let line = 4;                       /* root starts right after the 3 header lines */
+  function walk(n){
+    map.set(n._id, { keyLine:null, valLine:line });
+    if (n.type === 'dict'){
+      if (!n.children.length){ line += 1; return; }
+      line += 1;                                    /* <dict> */
+      for (const ch of n.children){
+        const keyLine = line;
+        line += 1;                                  /* <key>…</key> */
+        map.set(ch.value._id, { keyLine, valLine:line });
+        walk(ch.value);
+      }
+      line += 1;                                    /* </dict> */
+    } else if (n.type === 'array'){
+      if (!n.children.length){ line += 1; return; }
+      line += 1;                                    /* <array> */
+      for (const ch of n.children){
+        map.set(ch._id, { keyLine:null, valLine:line });
+        walk(ch);
+      }
+      line += 1;                                    /* </array> */
+    } else {
+      line += 1;
+    }
+  }
+  walk(doc.root);
+  return map;
+}
+
+/* ============================== per-line syntax highlighting ============================== */
+const PLIST_TEXT_TAGS = ['key','string','integer','real','date','data'];
+function hlLines(src){
+  const RE = /(<!--[\s\S]*?-->)|(<\?[\s\S]*?\?>)|(<![^>]*>)|(<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>)|([^<]+)/g;
+  let ctx = null, inCom = false;
+
+  function hlSegment(s){
+    RE.lastIndex = 0;
+    let out = '', m, pos = 0;
+    while ((m = RE.exec(s))){
+      pos = RE.lastIndex;
+      if (m[1] !== undefined) out += `<span class="tok-com">${escH(m[1])}</span>`;
+      else if (m[2] !== undefined || m[3] !== undefined) out += `<span class="tok-decl">${escH(m[2] ?? m[3])}</span>`;
+      else if (m[4] !== undefined){
+        const closing = m[5] === '/', name = m[6], attrs = m[7] || '', selfc = m[8] === '/';
+        out += `<span class="tok-punc">&lt;${closing ? '/' : ''}</span><span class="tok-tag">${escH(name)}</span>`
+             + `<span class="tok-attr">${escH(attrs)}</span><span class="tok-punc">${selfc ? '/' : ''}&gt;</span>`;
+        ctx = (closing || selfc) ? null : (PLIST_TEXT_TAGS.includes(name) ? name : null);
+      } else {
+        const cls = ctx === 'key' ? 'tok-key' : ctx === 'string' ? 'tok-str'
+          : ctx === 'data' ? 'tok-data' : ctx === 'date' ? 'tok-date'
+          : (ctx === 'integer' || ctx === 'real') ? 'tok-num' : '';
+        out += cls ? `<span class="${cls}">${escH(m[9])}</span>` : escH(m[9]);
+      }
+    }
+    if (pos < s.length) out += escH(s.slice(pos));
+    return out;
+  }
+
+  return src.split('\n').map(line => {
+    if (inCom){
+      const e = line.indexOf('-->');
+      if (e === -1) return `<span class="tok-com">${escH(line)}</span>`;
+      const head = `<span class="tok-com">${escH(line.slice(0, e + 3))}</span>`;
+      line = line.slice(e + 3); inCom = false;
+      return line ? head + hlSegment(line) : head;
+    }
+    const cs = line.indexOf('<!--');
+    if (cs !== -1 && line.indexOf('-->', cs + 4) === -1){
+      inCom = true;
+      return escH(line.slice(0, cs)) + `<span class="tok-com">${escH(line.slice(cs))}</span>`;
+    }
+    return hlSegment(line);
+  });
+}
+
+/* ============================== app state ============================== */
+let doc = { root:null, name:'Untitled.plist', dirty:false };
+let expanded = new Set();
+let selectedId = null;
+let rowIndex = new Map();
+let searchTerm = '';
+let filterActive = false, lastMatchCount = 0;
+let pendingFocus = null;
+let revealMode = false;
+let lastXmlSize = 0;
+let paneHidden = false, sourceDirty = false;
+let typeMenuCtx = null;
+
+/* right-pane state */
+let currentTab = 'source';
+let docRev = 0;
+let codeRenderedRev = -1;
+let codeChunkToken = 0;
+let lastPaintedXml = null;
+let wrapForced = false;
+let wrapNotified = false;
+let pendingJump = null;
+let srcMarkTimer = null;
+const WRAP_LIMIT = 800;
+const CODE_NOW = 600;
+const CODE_CHUNK = 900;
+
+/* ============================== toasts ============================== */
+function toast(msg, kind='ok', action){
+  const el = document.createElement('div');
+  el.className = 'toast t-' + kind;
+  el.innerHTML = icon(kind==='err' || kind==='warn' ? 'alert' : 'check') + `<span>${escH(msg)}</span>`;
+  const dismiss = () => { el.classList.add('out'); setTimeout(() => el.remove(), 220); };
+  if (action){
+    const b = document.createElement('button');
+    b.className = 'tact'; b.textContent = action.label;
+    b.onclick = () => { action.fn(); dismiss(); };
+    el.appendChild(b);
+  }
+  $('#toasts').appendChild(el);
+  setTimeout(dismiss, action ? 7000 : 2600);
+}
+
+/* ============================== rendering ============================== */
+const nodeValueText = n => n.children ? '' : String(n.value ?? '');
+
+function renderTree(){
+  const scroll = $('#treeScroll'), st = scroll.scrollTop;
+  const t = $('#tree'); t.innerHTML = '';
+  rowIndex.clear();
+  const f = searchTerm.trim().toLowerCase();
+  filterActive = !!f; lastMatchCount = 0;
+  let matchIds = null;
+
+  if (filterActive){
+    matchIds = new Set();
+    (function mark(n, label){
+      const self = (label + ' ' + nodeValueText(n)).toLowerCase().includes(f);
+      let any = self; if (self) lastMatchCount++;
+      if (n.children) n.children.forEach((c, i) => {
+        const ch = n.type==='dict' ? c.value : c;
+        if (mark(ch, n.type==='dict' ? (c.key || '') : ('#' + i))) any = true;
+      });
+      if (any) matchIds.add(n._id);
+      return any;
+    })(doc.root, 'Root');
+    if (lastMatchCount === 0){
+      $('#noResults').hidden = false;
+      $('#noResultsQ').textContent = searchTerm;
+      $('#emptyRoot').hidden = true;
+      updateChrome();
+      return;
+    }
+  }
+  $('#noResults').hidden = true;
+
+  const rows = [];
+  (function emit(n, parent, wrapper, label, depth, isRoot, idx){
+    if (filterActive && !matchIds.has(n._id)) return;
+    rows.push({ n, parent, wrapper, label, depth, isRoot, idx });
+    rowIndex.set(n._id, { node:n, parent, wrapper, label, depth, isRoot, idx });
+    if (n.children && (filterActive || expanded.has(n._id)))
+      n.children.forEach((c, i) => emit(
+        n.type==='dict' ? c.value : c, n, n.type==='dict' ? c : null,
+        n.type==='dict' ? (c.key || '(unnamed)') : ('#' + i), depth + 1, false, i));
+  })(doc.root, null, null, 'Root', 0, true, -1);
+
+  rows.forEach((r, i) => {
+    const el = buildRow(r);
+    if (revealMode){ el.classList.add('reveal'); el.style.animationDelay = Math.min(i * 24, 650) + 'ms'; }
+    t.appendChild(el);
+  });
+  revealMode = false;
+
+  $('#emptyRoot').hidden = !(doc.root.children && doc.root.children.length === 0 && !filterActive);
+  $('#erType').textContent = doc.root.type;
+
+  if (pendingFocus){
+    const el = t.querySelector(`.row[data-id="${pendingFocus.id}"]`);
+    if (el){
+      const inp = el.querySelector(pendingFocus.field === 'key' ? '.keyinput' : '.valinput');
+      if (inp){ inp.focus(); if (pendingFocus.field === 'key') inp.select(); }
+    }
+    pendingFocus = null;
+  }
+  scroll.scrollTop = st;
+  updateChrome();
+}
+
+function buildRow(r){
+  const row = document.createElement('div');
+  row.className = 'row' + (r.n._id === selectedId ? ' sel' : '');
+  row.dataset.id = r.n._id;
+
+  const disc = document.createElement('button');
+  disc.className = 'disc' + (r.n.children ? ' open' : ' leaf');
+  if (r.n.children){
+    disc.innerHTML = icon('chev', 13);
+    disc.title = 'Expand / collapse';
+  } else disc.innerHTML = '<i class="leafdot"></i>';
+  row.appendChild(disc);
+
+  const kc = document.createElement('div');
+  kc.className = 'keycell';
+  for (let g = 0; g < r.depth; g++){
+    const gi = document.createElement('i');
+    gi.className = 'guide'; gi.style.left = (g * 16) + 'px';
+    kc.appendChild(gi);
+  }
+  kc.style.paddingLeft = (r.depth * 16 + 8) + 'px';
+  if (r.isRoot){
+    const lab = document.createElement('span');
+    lab.className = 'rootlabel'; lab.textContent = 'Root';
+    kc.appendChild(lab);
+  } else if (r.wrapper){
+    const inp = document.createElement('input');
+    inp.className = 'keyinput'; inp.value = r.wrapper.key;
+    inp.placeholder = 'key'; inp.spellcheck = false;
+    kc.appendChild(inp);
+  } else {
+    const chip = document.createElement('span');
+    chip.className = 'idxchip'; chip.textContent = r.label;
+    kc.appendChild(chip);
+  }
+  row.appendChild(kc);
+
+  const badge = document.createElement('button');
+  badge.className = 'typebadge t-' + r.n.type;
+  badge.innerHTML = `<i class="dot"></i>${r.n.type}`;
+  badge.title = 'Change type';
+  row.appendChild(badge);
+
+  const vc = document.createElement('div');
+  vc.className = 'valcell';
+  buildValueEditor(vc, r.n);
+  row.appendChild(vc);
+
+  const bar = document.createElement('div');
+  bar.className = 'rowacts';
+  const mk = (act, ic, title, cls='') => {
+    const b = document.createElement('button');
+    b.className = 'rab ' + cls; b.dataset.act = act; b.title = title;
+    b.innerHTML = icon(ic, 13);
+    bar.appendChild(b);
+  };
+  if (r.n.children) mk('add', r.n.type==='dict' ? 'sub' : 'plus',
+    r.n.type==='dict' ? 'Add key' : 'Add item');
+  if (!r.isRoot){
+    mk('up','up','Move up (Alt+↑)');
+    mk('down','down','Move down (Alt+↓)');
+    mk('dup','copy','Duplicate');
+    mk('del','trash','Delete','danger');
+  }
+  row.appendChild(bar);
+  return row;
+}
+
+function buildValueEditor(cell, n){
+  if (n.type === 'dict' || n.type === 'array'){
+    const b = document.createElement('button');
+    b.className = 'summary';
+    const len = n.children.length;
+    b.innerHTML = n.type === 'dict'
+      ? `{ <span class="cnt">${len} key${len===1?'':'s'}</span> }`
+      : `[ <span class="cnt">${len} item${len===1?'':'s'}</span> ]`;
+    b.title = 'Toggle expanded';
+    cell.appendChild(b);
+    return;
+  }
+  if (n.type === 'boolean'){
+    cell.innerHTML = `<span class="boollabel ${n.value?'on':'off'}" title="Click to toggle">${n.value}</span>`
+      + `<button class="switch ${n.value?'on':''}" role="switch" aria-checked="${n.value}" title="Toggle"></button>`;
+    return;
+  }
+  if (n.type === 'date'){
+    cell.innerHTML = `<input type="datetime-local" class="valinput c-date" step="1" value="${isoToLocalInput(n.value)}">`
+      + `<span class="hint" title="Stored in UTC as ${escH(n.value)}">UTC</span>`;
+    return;
+  }
+  const inp = document.createElement('input');
+  inp.className = 'valinput'; inp.spellcheck = false; inp.value = n.value ?? '';
+  if (n.type === 'integer'){ inp.classList.add('num','c-int'); inp.inputMode = 'numeric'; inp.placeholder = '0'; }
+  else if (n.type === 'real'){ inp.classList.add('num','c-real'); inp.inputMode = 'decimal'; inp.placeholder = '0.0'; }
+  else if (n.type === 'data'){
+    inp.classList.add('c-data'); inp.placeholder = 'base64 data';
+    const h = document.createElement('span');
+    h.className = 'hint datasize'; h.textContent = fmtBytes(b64Bytes(n.value)); h.title = 'Decoded size';
+    cell.appendChild(inp); cell.appendChild(h);
+    return;
+  }
+  else inp.placeholder = '(empty string)';
+  cell.appendChild(inp);
+}
+
+/* ============================== chrome ============================== */
+let crumbIds = [];
+function updateChrome(){
+  $('#dirtyDot').classList.toggle('on', doc.dirty);
+  document.title = `${doc.name}${doc.dirty ? ' — edited' : ''} · PlistStar`;
+  const fileName = $('#fileName');
+  if (document.activeElement !== fileName && fileName.textContent !== doc.name)
+    fileName.textContent = doc.name;
+  const total = doc.root ? countNodes(doc.root) : 0;
+  $('#nodeCount').textContent = filterActive
+    ? `${lastMatchCount} of ${total} nodes` : `${total} nodes`;
+  $('#statRight').textContent = `${total} nodes · ${fmtBytes(lastXmlSize || (lastXmlSize = (computeXML() || '').length))}`;
+
+  crumbIds = [];
+  const labels = [];
+  (function find(n, trailL, trailI){
+    if (n._id === selectedId){ labels.push(...trailL); crumbIds.push(...trailI); return true; }
+    if (n.children) for (let i = 0; i < n.children.length; i++){
+      const c = n.children[i], child = n.type==='dict' ? c.value : c;
+      const lab = n.type==='dict' ? (c.key || '(unnamed)') : ('#' + i);
+      if (find(child, [...trailL, lab], [...trailI, child._id])) return true;
+    }
+    return false;
+  })(doc.root, ['Root'], [doc.root._id]);
+
+  $('#crumbs').innerHTML = labels.map((l, i) =>
+    (i ? '<span class="crumb-sep">›</span>' : '')
+    + `<span class="crumb${i === labels.length-1 ? ' current' : ''}" data-i="${i}">${escH(l)}</span>`
+  ).join('') || '<span class="crumb current">Root</span>';
+}
+ $('#crumbs').addEventListener('click', e => {
+  const c = e.target.closest('.crumb[data-i]');
+  if (c){
+    selectedId = crumbIds[+c.dataset.i];
+    pendingJump = { id: selectedId, preferKey:true };
+    renderTree();
+    scheduleUpdate();
+  }
+});
+
+/* ============================== right pane ============================== */
+function setWrapUI(on){
+  $('#codeScroll').classList.toggle('wrap', on);
+  $('#btnWrap').classList.toggle('active', on);
+}
+function applyWrapPolicy(lineCount){
+  const cs = $('#codeScroll');
+  const big = lineCount > WRAP_LIMIT;
+  if (big && cs.classList.contains('wrap') && !wrapForced){
+    setWrapUI(false);
+    if (!wrapNotified){
+      wrapNotified = true;
+      toast('Large document — Preview opens with soft wrap off for speed. Toggle it with the wrap button.', 'warn');
+    }
+  } else if (!big && !wrapForced && !cs.classList.contains('wrap')){
+    setWrapUI(true);
+  }
+}
+function updateMeta(xml){
+  lastXmlSize = xml.length;
+  const lines = xml.split('\n').length;
+  $('#codeMeta').textContent = `${lines} lines · ${fmtBytes(lastXmlSize)}`;
+  $('#statRight').textContent = `${countNodes(doc.root)} nodes · ${fmtBytes(lastXmlSize)}`;
+}
+
+function paintCode(xml, force = false){
+  if (!xml) return;
+  if (!force && xml === lastPaintedXml && codeRenderedRev === docRev) return;
+  codeChunkToken++;
+  const token = codeChunkToken;
+  lastPaintedXml = xml;
+  codeRenderedRev = docRev;
+
+  const rawLines = xml.split('\n');
+  applyWrapPolicy(rawLines.length);
+
+  let rows;
+  try {
+    rows = hlLines(xml).map((h, i) =>
+      `<div class="cl" data-ln="${i + 1}"><span class="ln">${i + 1}</span><span class="lc">${h}</span></div>`);
+  } catch (err){
+    try {
+      rows = rawLines.map((l, i) =>
+        `<div class="cl" data-ln="${i + 1}"><span class="ln">${i + 1}</span><span class="lc">${escH(l)}</span></div>`);
+    } catch (err2){
+      $('#codeLines').textContent = xml;
+      return;
+    }
+  }
+
+  const cs = $('#codeScroll'), container = $('#codeLines'), st = cs.scrollTop;
+  if (rows.length <= CODE_NOW || st > 40){
+    container.innerHTML = rows.join('');
+    cs.scrollTop = st;
+    return;
+  }
+  container.innerHTML = rows.slice(0, CODE_NOW).join('');
+  let idx = CODE_NOW;
+  (function more(){
+    if (token !== codeChunkToken) return;
+    if (idx >= rows.length) return;
+    container.insertAdjacentHTML('beforeend', rows.slice(idx, idx + CODE_CHUNK).join(''));
+    idx += CODE_CHUNK;
+    if (idx < rows.length) requestAnimationFrame(more);
+  })();
+}
+
+function syncSource(xml){
+  const ta = $('#sourceArea');
+  if (ta.value === xml) return;
+  const st = ta.scrollTop;
+  ta.value = xml;
+  ta.scrollTop = st;
+}
+function ensureCodeFresh(){
+  if (currentTab !== 'preview') return;
+  if (codeRenderedRev !== docRev || !$('#codeLines').childElementCount){
+    const xml = computeXML();
+    if (xml){ updateMeta(xml); paintCode(xml, true); }
+  }
+  if (pendingJump && !sourceDirty){ performJump(pendingJump); pendingJump = null; }
+}
+
+/* ---------- reveal: scroll Source (or highlight Preview) at a node's line ---------- */
+function performJump(j){
+  if (!doc.root || sourceDirty) return;
+  const info = buildLineMap().get(j.id);
+  if (!info) return;
+  const line = (j.preferKey && info.keyLine) ? info.keyLine : info.valLine;
+  if (currentTab === 'preview') jumpPreviewTo(line);
+  else jumpSourceTo(line);
+}
+function jumpSourceTo(line){
+  const ta = $('#sourceArea');
+  const cs = getComputedStyle(ta);
+  const lh = parseFloat(cs.lineHeight) || 19;
+  const padTop = parseFloat(cs.paddingTop) || 0;
+  const y = padTop + (line - 1) * lh;
+  const viewTop = ta.scrollTop, viewBot = viewTop + ta.clientHeight;
+  if (y < viewTop + lh || y > viewBot - lh * 2)
+    ta.scrollTop = Math.max(0, y - ta.clientHeight / 2);
+  const mark = $('#srcMark');
+  mark.style.top = Math.round(y - ta.scrollTop + 2) + 'px';
+  mark.style.height = Math.max(10, Math.round(lh - 4)) + 'px';
+  mark.style.opacity = '1';
+  clearTimeout(srcMarkTimer);
+  srcMarkTimer = setTimeout(() => { mark.style.opacity = '0'; }, 1300);
+}
+function jumpPreviewTo(line, tries = 30){
+  const el = document.querySelector(`#codeLines .cl[data-ln="${line}"]`);
+  if (el){
+    document.querySelectorAll('#codeLines .cl.rowhl').forEach(r => r.classList.remove('rowhl'));
+    el.scrollIntoView({ block:'center' });
+    el.classList.add('rowhl');
+    setTimeout(() => el.classList.remove('rowhl'), 1400);
+  } else if (tries > 0){
+    requestAnimationFrame(() => jumpPreviewTo(line, tries - 1));
+  }
+}
+
+function postUpdate(){
+  const xml = computeXML(); if (!xml) return;
+  updateMeta(xml);
+  if (currentTab === 'preview'){ paintCode(xml); }
+  else if (!sourceDirty){ syncSource(xml); }
+  if (pendingJump && !sourceDirty && !paneHidden){
+    performJump(pendingJump); pendingJump = null;
+  }
+}
+function scheduleUpdate(){
+  clearTimeout(postUpdate._t);
+  postUpdate._t = setTimeout(postUpdate, 120);
+}
+
+/* ============================== tab switching ============================== */
+function switchTab(name){
+  if (name === 'preview' && sourceDirty){
+    toast('Unapplied source edits were discarded', 'warn');
+    sourceDirty = false; $('#btnApplySource').disabled = true;
+  }
+  currentTab = name;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $('#codeScroll').classList.toggle('active', name === 'preview');
+  $('#sourceWrap').classList.toggle('active', name === 'source');
+  $('#btnApplySource').hidden = name !== 'source';
+  $('#btnWrap').hidden = name !== 'preview';
+  if (name === 'source'){
+    if (!sourceDirty){ const xml = computeXML(); if (xml){ updateMeta(xml); syncSource(xml); } }
+    if (pendingJump && !sourceDirty){ performJump(pendingJump); pendingJump = null; }
+  } else {
+    ensureCodeFresh();
+  }
+}
+ $('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]');
+  if (b) switchTab(b.dataset.tab);
+});
+ $('#sourceArea').addEventListener('input', () => {
+  sourceDirty = true; $('#btnApplySource').disabled = false;
+});
+ $('#btnApplySource').addEventListener('click', () => {
+  try {
+    const root = parsePlist($('#sourceArea').value);
+    assignIds(root);
+    doc.root = root; doc.dirty = true;
+    docRev++;
+    expanded = new Set([root._id]);
+    if (root.children) root.children.forEach(c => {
+      const v = root.type === 'dict' ? c.value : c;
+      if (v.children) expanded.add(v._id);
+    });
+    selectedId = root._id;
+    sourceDirty = false; $('#btnApplySource').disabled = true;
+    lastPaintedXml = null; codeRenderedRev = -1;
+    renderTree(); switchTab('source');
+    toast('Source applied', 'ok');
+  } catch (err){
+    toast(err.message, 'err');
+    const ta = $('#sourceArea');
+    ta.classList.add('shake'); setTimeout(() => ta.classList.remove('shake'), 400);
+  }
+});
+ $('#btnWrap').addEventListener('click', () => {
+  wrapForced = true;
+  setWrapUI(!$('#codeScroll').classList.contains('wrap'));
+});
+
+/* ============================== mutations ============================== */
+function mutate(structural = true){
+  doc.dirty = true;
+  docRev++;
+  if (structural) renderTree(); else updateChrome();
+  scheduleUpdate();
+}
+function select(id){
+  selectedId = id;
+  document.querySelectorAll('#tree .row.sel').forEach(r => r.classList.remove('sel'));
+  const el = document.querySelector(`#tree .row[data-id="${id}"]`);
+  if (el) el.classList.add('sel');
+  pendingJump = { id, preferKey:true };
+  updateChrome();
+  scheduleUpdate();
+}
+function toggleExpand(id){
+  if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+  renderTree();
+}
+
+/* ============================== row actions ============================== */
+function doAction(act, ri){
+  if (!ri) return;
+  switch (act){
+    case 'add': {
+      const cont = ri.node;
+      if (!cont.children) return;
+      let newId;
+      if (cont.type === 'dict'){
+        const entry = { key: uniqueKey(cont, 'newKey'), value: { type:'string', value:'' } };
+        cont.children.push(entry);
+        assignIds(entry.value); newId = entry.value._id;
+      } else {
+        const nn = { type:'string', value:'' };
+        cont.children.push(nn);
+        assignIds(nn); newId = nn._id;
+      }
+      expanded.add(cont._id);
+      selectedId = newId;
+      pendingFocus = { id:newId, field: cont.type==='dict' ? 'key' : 'val' };
+      pendingJump = { id:newId, preferKey:true };
+      mutate();
+      break;
+    }
+    case 'up': case 'down': {
+      if (ri.isRoot || !ri.parent) return;
+      const list = ri.parent.children, item = ri.wrapper || ri.node;
+      const i = list.indexOf(item), j = act === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      pendingJump = { id:selectedId, preferKey:true };
+      mutate();
+      break;
+    }
+    case 'dup': {
+      if (ri.isRoot || !ri.parent) return;
+      const list = ri.parent.children, i = list.indexOf(ri.wrapper || ri.node);
+      let clone, nid;
+      if (ri.wrapper){
+        clone = { key: uniqueKey(ri.parent, (ri.wrapper.key || 'key') + ' copy'), value: cloneNode(ri.wrapper.value) };
+        assignIds(clone.value); nid = clone.value._id;
+      } else {
+        clone = cloneNode(ri.node); assignIds(clone); nid = clone._id;
+      }
+      list.splice(i + 1, 0, clone);
+      selectedId = nid;
+      pendingJump = { id:nid, preferKey:true };
+      mutate();
+      toast('Duplicated', 'ok');
+      break;
+    }
+    case 'del': {
+      if (ri.isRoot || !ri.parent) return;
+      const list = ri.parent.children, i = list.indexOf(ri.wrapper || ri.node);
+      const [removed] = list.splice(i, 1);
+      const nb = list[Math.min(i, list.length - 1)];
+      selectedId = nb ? (('key' in nb) ? nb.value._id : nb._id) : ri.parent._id;
+      pendingJump = { id:selectedId, preferKey:true };
+      mutate();
+      toast(`Deleted “${ri.label || 'item'}”`, 'warn', { label:'Undo', fn(){
+        list.splice(i, 0, removed);
+        selectedId = ('key' in removed) ? removed.value._id : removed._id;
+        pendingJump = { id:selectedId, preferKey:true };
+        mutate();
+      }});
+      break;
+    }
+  }
+}
+
+/* ============================== type conversion ============================== */
+function convertNode(n, nt){
+  switch (nt){
+    case 'string':  return { type:'string', value: n.children ? ''
+      : (n.type==='boolean' ? (n.value ? 'true' : 'false') : String(n.value ?? '')) };
+    case 'integer': return { type:'integer', value: n.children ? 0 : (parseInt(n.value, 10) || 0) };
+    case 'real':    return { type:'real', value: n.children ? 0 : (parseFloat(n.value) || 0) };
+    case 'boolean': return { type:'boolean', value: true };
+    case 'date':    return { type:'date', value: normalizeDate(n.children ? Date.now() : n.value) };
+    case 'data':    return { type:'data', value: n.children ? ''
+      : (n.type==='data' ? n.value : b64encode(n.type==='boolean' ? (n.value?'true':'false') : String(n.value ?? ''))) };
+    case 'array':   return { type:'array', children: n.children
+      ? (n.type==='array' ? n.children : n.children.map(c => c.value)) : [] };
+    case 'dict':    return { type:'dict', children: n.children
+      ? (n.type==='dict' ? n.children : n.children.map((c, i) => ({ key:'item' + (i+1), value:c }))) : [] };
+  }
+}
+function convertType(ri, nt){
+  const n = ri.node;
+  if (!n || n.type === nt) return;
+  if (ri.isRoot && nt !== 'dict' && nt !== 'array'){
+    toast('The root must stay a dict or array', 'err'); return;
+  }
+  const drops = n.children && n.children.length && !(nt === 'dict' || nt === 'array');
+  const losesKeys = n.type === 'dict' && nt === 'array' && n.children.length > 0;
+  const nn = convertNode(n, nt);
+  nn._id = idSeq++;
+  let revert;
+  if (ri.isRoot){
+    const old = doc.root; doc.root = nn;
+    revert = () => { doc.root = old; selectedId = old._id; };
+    if (expanded.has(old._id)){ expanded.delete(old._id); expanded.add(nn._id); }
+  } else if (ri.wrapper){
+    const old = ri.wrapper.value; ri.wrapper.value = nn;
+    revert = () => { ri.wrapper.value = old; selectedId = old._id; };
+    if (expanded.has(old._id)){ expanded.delete(old._id); expanded.add(nn._id); }
+  } else {
+    const old = ri.parent.children[ri.idx]; ri.parent.children[ri.idx] = nn;
+    revert = () => { ri.parent.children[ri.idx] = old; selectedId = old._id; };
+    if (expanded.has(old._id)){ expanded.delete(old._id); expanded.add(nn._id); }
+  }
+  selectedId = nn._id;
+  pendingJump = { id: nn._id, preferKey:false };
+  mutate();
+  if (drops || losesKeys)
+    toast(`Converted to ${nt} — some data was dropped`, 'warn', { label:'Undo', fn(){ revert(); mutate(); } });
+}
+
+/* ============================== type menu ============================== */
+const typeMenu = $('#typeMenu');
+function openTypeMenu(anchor, ri){
+  typeMenu.innerHTML = TYPES.map(t =>
+    `<button data-t="${t}"><i class="dot" style="background:var(--t-${t})"></i>${t}</button>`).join('');
+  typeMenu.hidden = false;
+  typeMenuCtx = ri;
+  const r = anchor.getBoundingClientRect();
+  typeMenu.style.visibility = 'hidden'; typeMenu.style.left = '0px'; typeMenu.style.top = '0px';
+  requestAnimationFrame(() => {
+    const w = typeMenu.offsetWidth, h = typeMenu.offsetHeight;
+    typeMenu.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 10)) + 'px';
+    typeMenu.style.top = (r.bottom + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6) + 'px';
+    typeMenu.style.visibility = '';
+  });
+}
+const closeTypeMenu = () => { typeMenu.hidden = true; typeMenuCtx = null; };
+typeMenu.addEventListener('click', e => {
+  const b = e.target.closest('[data-t]');
+  if (b && typeMenuCtx){ convertType(typeMenuCtx, b.dataset.t); closeTypeMenu(); }
+});
+window.addEventListener('scroll', closeTypeMenu, true);
+window.addEventListener('resize', closeTypeMenu);
+
+/* ============================== templates (OpenCore / Clover) ============================== */
+const TPLS = {
+  oc: {
+    label:'OpenCore Sample.plist',
+    name:'Sample.plist',
+    urls:[
+      'https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Docs/Sample.plist',
+      'https://cdn.jsdelivr.net/gh/acidanthera/OpenCorePkg@master/Docs/Sample.plist'
+    ],
+    logo:'#tplOc .tpl-logo'
+  },
+  clover: {
+    label:'Clover config-sample.plist',
+    name:'config-sample.plist',
+    urls:[
+      'https://raw.githubusercontent.com/CloverHackyColor/CloverBootloader/master/CloverPackage/CloverV2/EFI/CLOVER/config-sample.plist',
+      'https://cdn.jsdelivr.net/gh/CloverHackyColor/CloverBootloader@master/CloverPackage/CloverV2/EFI/CLOVER/config-sample.plist'
+    ],
+    logo:'#tplClover .tpl-logo'
+  }
+};
+const tplLoading = new Set();
+
+async function loadTemplate(key){
+  const tpl = TPLS[key];
+  if (!tpl || tplLoading.has(key)) return;
+  tplLoading.add(key);
+  const logo = document.querySelector(tpl.logo);
+  if (logo) logo.classList.add('loading');
+  toast(`Fetching ${tpl.label}…`, 'ok');
+  try {
+    let text = null, fromCache = false;
+    for (const url of tpl.urls){
+      try {
+        const res = await fetch(url, { cache:'no-cache' });
+        if (res.ok){ text = await res.text(); break; }
+      } catch (e){ /* try the next mirror */ }
+    }
+    if (!text || !text.trim()){
+      try { text = localStorage.getItem('ps_tpl_' + key); } catch {}
+      if (text && text.trim()) fromCache = true;
+      else throw new Error('unreachable and no cached copy');
+    }
+    if (!fromCache){ try { localStorage.setItem('ps_tpl_' + key, text); } catch {} }
+    loadFromText(text, { name: tpl.name, reveal:true, toast:false });
+    toast(fromCache
+      ? `Loaded ${tpl.label} from cached copy (offline)`
+      : `Loaded ${tpl.label} — ${countNodes(doc.root)} nodes`, 'ok');
+  } catch (err){
+    toast(`Could not load ${tpl.label}: ${err.message}. You can paste the XML manually instead.`,
+      'err', { label:'Go to Source', fn(){ $('#sourceArea').focus(); } });
+  } finally {
+    tplLoading.delete(key);
+    if (logo) logo.classList.remove('loading');
+  }
+}
+ $('#tplOc').addEventListener('click', () => loadTemplate('oc'));
+ $('#tplClover').addEventListener('click', () => loadTemplate('clover'));
+
+/* ============================== about card ============================== */
+const aboutCard = $('#aboutCard');
+function setAbout(show){ aboutCard.hidden = !show; }
+ $('#btnAboutClose').addEventListener('click', () => setAbout(false));
+ $('#btnAbout').addEventListener('click', () => setAbout(aboutCard.hidden));
+
+/* ============================== new-document menu ============================== */
+const newMenu = $('#newMenu');
+function newEmpty(){
+  doc = freshDoc();
+  docRev++;
+  expanded = new Set([doc.root._id]);
+  selectedId = doc.root._id;
+  searchTerm = ''; $('#search').value = '';
+  sourceDirty = false; $('#btnApplySource').disabled = true;
+  wrapForced = false; wrapNotified = false;
+  lastPaintedXml = null; codeRenderedRev = -1;
+  pendingJump = null;
+  renderTree(); switchTab('source');
+  toast('New document — add your first key', 'ok');
+}
+function toggleNewMenu(){
+  const open = newMenu.hidden;
+  if (open){
+    newMenu.hidden = false;
+    const r = $('#btnNew').getBoundingClientRect();
+    newMenu.style.visibility = 'hidden'; newMenu.style.left = '0px'; newMenu.style.top = '0px';
+    requestAnimationFrame(() => {
+      const w = newMenu.offsetWidth, h = newMenu.offsetHeight;
+      newMenu.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 10)) + 'px';
+      newMenu.style.top = (r.bottom + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6) + 'px';
+      newMenu.style.visibility = '';
+    });
+  } else newMenu.hidden = true;
+  $('#btnNew').classList.toggle('menu-open', open);
+}
+ $('#btnNew').addEventListener('click', e => { e.stopPropagation(); toggleNewMenu(); });
+newMenu.addEventListener('click', e => {
+  const b = e.target.closest('[data-new]');
+  if (!b) return;
+  newMenu.hidden = true;
+  $('#btnNew').classList.remove('menu-open');
+  const what = b.dataset.new;
+  if (what === 'empty') newEmpty();
+  else loadTemplate(what);
+});
+
+/* ============================== tree events ============================== */
+const tree = $('#tree');
+tree.addEventListener('click', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const id = +row.dataset.id, ri = rowIndex.get(id);
+  if (!ri) return;
+  if (e.target.closest('.disc')){ select(id); toggleExpand(id); return; }
+  if (e.target.closest('.typebadge')){ openTypeMenu(e.target.closest('.typebadge'), ri); return; }
+  if (e.target.closest('.summary')){ select(id); toggleExpand(id); return; }
+  const bctl = e.target.closest('.switch,.boollabel');
+  if (bctl){
+    select(id);
+    ri.node.value = !ri.node.value;
+    pendingJump = { id, preferKey:false };   /* reveal the <true/>/<false/> line */
+    const swEl = row.querySelector('.switch');
+    const lab = row.querySelector('.boollabel');
+    if (swEl){ swEl.classList.toggle('on', ri.node.value); swEl.setAttribute('aria-checked', ri.node.value); }
+    if (lab){ lab.textContent = ri.node.value; lab.className = 'boollabel ' + (ri.node.value ? 'on' : 'off'); }
+    mutate(false);
+    return;
+  }
+  const act = e.target.closest('[data-act]');
+  if (act){ doAction(act.dataset.act, ri); return; }
+  select(id);
+});
+
+tree.addEventListener('input', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const ri = rowIndex.get(+row.dataset.id); if (!ri) return;
+  if (e.target.classList.contains('c-date')) return;
+  if (e.target.classList.contains('keyinput')){
+    ri.wrapper.key = e.target.value;
+    mutate(false);
+  } else if (e.target.classList.contains('valinput')){
+    const t = ri.node.type;
+    if (t === 'integer' || t === 'real'){
+      const v = e.target.value.trim();
+      const ok = v === '' || (t === 'integer' ? /^-?\d+$/.test(v)
+        : /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(v));
+      e.target.classList.toggle('bad', !ok);
+    }
+    ri.node.value = e.target.value;
+    if (t === 'data'){
+      const h = e.target.nextElementSibling;
+      if (h && h.classList.contains('datasize')) h.textContent = fmtBytes(b64Bytes(e.target.value));
+    }
+    mutate(false);
+  }
+});
+
+tree.addEventListener('change', e => {
+  if (!e.target.classList.contains('c-date')) return;
+  const row = e.target.closest('.row'); if (!row) return;
+  const ri = rowIndex.get(+row.dataset.id); if (!ri) return;
+  ri.node.value = localInputToISO(e.target.value);
+  const hint = e.target.nextElementSibling;
+  if (hint) hint.title = 'Stored in UTC as ' + ri.node.value;
+  mutate(false);
+});
+
+tree.addEventListener('focusout', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const ri = rowIndex.get(+row.dataset.id); if (!ri) return;
+  if (e.target.classList.contains('valinput') && !e.target.classList.contains('c-date')){
+    const t = ri.node.type, v = e.target.value.trim();
+    if (t === 'integer'){
+      const p = parseInt(v, 10);
+      ri.node.value = Number.isNaN(p) ? 0 : p;
+      e.target.value = String(ri.node.value);
+    } else if (t === 'real'){
+      const p = parseFloat(v);
+      ri.node.value = Number.isNaN(p) ? 0 : p;
+      e.target.value = String(ri.node.value);
+    }
+    e.target.classList.remove('bad');
+  }
+});
+
+tree.addEventListener('keydown', e => {
+  if (!e.target.matches('.keyinput,.valinput')) return;
+  const row = e.target.closest('.row');
+  if (e.key === 'Enter'){
+    e.preventDefault();
+    if (e.target.classList.contains('keyinput')) row.querySelector('.valinput')?.focus();
+    else {
+      const rows = [...tree.children], i = rows.indexOf(row);
+      rows[i+1]?.querySelector('.keyinput,.valinput')?.focus();
+    }
+  } else if (e.key === 'Escape') e.target.blur();
+});
+
+/* ============================== search ============================== */
+ $('#search').addEventListener('input', e => { searchTerm = e.target.value; renderTree(); });
+ $('#search').addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ e.target.value = ''; searchTerm = ''; renderTree(); e.target.blur(); }
+});
+ $('#btnClearSearch').addEventListener('click', () => {
+  $('#search').value = ''; searchTerm = ''; renderTree();
+});
+ $('#btnAddRoot').addEventListener('click', () => {
+  const sel = rowIndex.get(selectedId);
+  doAction('add', (sel && sel.node.children) ? sel : rowIndex.get(doc.root._id));
+});
+ $('#btnAddFirst').addEventListener('click', () => doAction('add', rowIndex.get(doc.root._id)));
+ $('#btnOpen2').addEventListener('click', () => $('#fileInput').click());
+ $('#btnPasteXml').addEventListener('click', () => { switchTab('source'); $('#sourceArea').focus(); });
+
+/* ============================== document actions ============================== */
+function freshDoc(){
+  const root = { type:'dict', children: [] };
+  assignIds(root);
+  return { root, name:'Untitled.plist', dirty:false };
+}
+function loadFromText(text, opts = {}){
+  try {
+    const root = parsePlist(text);
+    assignIds(root);
+    doc = { root, name: opts.name || 'Untitled.plist', dirty: false };
+    docRev++;
+    expanded = new Set([root._id]);
+    if (root.children) root.children.forEach(c => {
+      const v = root.type === 'dict' ? c.value : c;
+      if (v.children) expanded.add(v._id);
+    });
+    selectedId = root._id;
+    searchTerm = ''; $('#search').value = '';
+    sourceDirty = false; $('#btnApplySource').disabled = true;
+    wrapForced = false; wrapNotified = false;
+    lastPaintedXml = null; codeRenderedRev = -1;
+    pendingJump = null;
+    if (opts.reveal) revealMode = true;
+    renderTree(); switchTab('source');
+    if (opts.toast !== false) toast(`Loaded ${doc.name}`, 'ok');
+  } catch (err){
+    toast('Could not parse: ' + err.message, 'err');
+  }
+}
+function doExport(){
+  if (!doc.root) return;
+  const xml = buildXML();
+  const name = doc.name.endsWith('.plist') ? doc.name : doc.name + '.plist';
+  const blob = new Blob([xml], { type:'application/xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  doc.dirty = false; updateChrome();
+  toast('Exported ' + name, 'ok');
+}
+async function copyXML(){
+  if (!doc.root) return;
+  const xml = buildXML();
+  try { await navigator.clipboard.writeText(xml); toast('XML copied to clipboard', 'ok'); }
+  catch {
+    const ta = document.createElement('textarea');
+    ta.value = xml; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    toast('XML copied to clipboard', 'ok');
+  }
+}
+ $('#btnExport').addEventListener('click', doExport);
+ $('#btnCopy').addEventListener('click', copyXML);
+ $('#btnCopyCode').addEventListener('click', copyXML);
+ $('#btnOpen').addEventListener('click', () => $('#fileInput').click());
+ $('#fileInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  loadFromText(await f.text(), { name: f.name, reveal:true });
+  e.target.value = '';
+});
+
+/* rename */
+const fileName = $('#fileName');
+fileName.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fileName.blur(); } });
+fileName.addEventListener('paste', e => {
+  e.preventDefault();
+  document.execCommand('insertText', false, (e.clipboardData.getData('text/plain') || '').replace(/\s+/g,' ').slice(0, 100));
+});
+fileName.addEventListener('blur', () => {
+  let v = fileName.textContent.trim().replace(/\s+/g,' ').slice(0, 100) || 'Untitled.plist';
+  fileName.textContent = v;
+  if (v !== doc.name){ doc.name = v; mutate(false); }
+});
+
+/* ============================== pane toggle & resize ============================== */
+function togglePane(){
+  paneHidden = !paneHidden;
+  $('#split').classList.toggle('nopane', paneHidden);
+  $('#btnPane').classList.toggle('active', !paneHidden);
+  if (!paneHidden){
+    if (currentTab === 'preview') ensureCodeFresh();
+    else if (pendingJump && !sourceDirty){ performJump(pendingJump); pendingJump = null; }
+  }
+}
+ $('#btnPane').addEventListener('click', togglePane);
+
+const divider = $('#divider');
+let dragging = false;
+divider.addEventListener('pointerdown', e => {
+  dragging = true;
+  divider.classList.add('drag');
+  divider.setPointerCapture(e.pointerId);
+  document.body.classList.add('col-resize');
+});
+divider.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const w = Math.min(Math.max(innerWidth - e.clientX, 280), innerWidth * 0.7);
+  $('#split').style.setProperty('--xmlw', w + 'px');
+});
+divider.addEventListener('pointerup', () => {
+  dragging = false;
+  divider.classList.remove('drag');
+  document.body.classList.remove('col-resize');
+});
+divider.addEventListener('dblclick', () => $('#split').style.removeProperty('--xmlw'));
+
+/* ============================== drag & drop files ============================== */
+let dragDepth = 0;
+const overlay = $('#dropOverlay');
+window.addEventListener('dragenter', e => {
+  if ([...e.dataTransfer.types].includes('Files')){ e.preventDefault(); dragDepth++; overlay.classList.add('on'); }
+});
+window.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+window.addEventListener('dragleave', () => { if (--dragDepth <= 0){ dragDepth = 0; overlay.classList.remove('on'); } });
+window.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; overlay.classList.remove('on');
+  const f = e.dataTransfer.files[0];
+  if (f) f.text().then(t => loadFromText(t, { name: f.name, reveal:true }));
+});
+
+/* ============================== global shortcuts ============================== */
+window.addEventListener('keydown', e => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 's'){ e.preventDefault(); doExport(); }
+  else if (mod && e.key.toLowerCase() === 'e'){ e.preventDefault(); togglePane(); }
+  else if (mod && e.key.toLowerCase() === 'f'){ e.preventDefault(); $('#search').focus(); }
+  else if (e.key === 'Escape'){
+    if (!typeMenu.hidden) closeTypeMenu();
+    if (!newMenu.hidden){ newMenu.hidden = true; $('#btnNew').classList.remove('menu-open'); }
+  }
+  else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && selectedId != null){
+    const ri = rowIndex.get(selectedId);
+    if (ri && !ri.isRoot){ e.preventDefault(); doAction(e.key === 'ArrowUp' ? 'up' : 'down', ri); }
+  }
+});
+document.addEventListener('click', e => {
+  if (!typeMenu.hidden && !e.target.closest('#typeMenu') && !e.target.closest('.typebadge')) closeTypeMenu();
+  if (!newMenu.hidden && !e.target.closest('#newMenu') && !e.target.closest('#btnNew')){
+    newMenu.hidden = true; $('#btnNew').classList.remove('menu-open');
+  }
+});
+
+/* ============================== boot ============================== */
+doc = freshDoc();
+expanded = new Set([doc.root._id]);
+selectedId = doc.root._id;
+renderTree();
+{ const xml = computeXML(); if (xml){ updateMeta(xml); syncSource(xml); } }
+</script>
+</body>
+</html>
