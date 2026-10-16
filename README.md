@@ -69,8 +69,6 @@ open, edit, validate and export from any browser. No install, no server, no tele
 - Dates are edited and preserved in **UTC**, matching Apple's plist convention.
 - Everything runs locally in your browser — no telemetry, no uploads, works fully offline.
 
-## 📄 License
-
-Copyright © 2026 **chris1111** · All Rights Reserved.
+#### 📄 [License](https://github.com/chris1111/PlistStar/blob/main/LICENSE) Copyright © 2026 **chris1111** · All Rights Reserved.
 
 
