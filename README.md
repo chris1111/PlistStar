@@ -1,7 +1,7 @@
 [![Platform](https://img.shields.io/badge/platform-Any%20modern%20browser-4da3ff)](#)
 [![Single file](https://img.shields.io/badge/single--file-HTML%20·%20CSS%20·%20JS-4da3ff)](#)
 [![Offline](https://img.shields.io/badge/works-100%25%20offline-success)](#)
-[License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://github.com/chris1111/PlistStar/blob/main/LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://github.com/chris1111/PlistStar/blob/main/LICENSE)
 
 <div align="center">
 
