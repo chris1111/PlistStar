@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# PlistStar 
+# <img width="50" height="50" alt="Logo" src="https://github.com/user-attachments/assets/a2bde3c5-cb7d-422f-8a36-5aeeb4cf3fc0" /> PlistStar 
 ### Open ➤ [PlistStar](https://chris1111.github.io/PlistStar/)
 
 **A polished, dependency-free editor for macOS `.plist` files — packed into a single HTML file.**
