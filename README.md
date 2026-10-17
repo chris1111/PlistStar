@@ -67,7 +67,7 @@ open, edit, validate and export from any browser. No install, no server, no tele
 
 - PlistStar reads and writes **XML plists**. Binary `bplist` files are not supported — convert first with `plutil -convert xml1 file.plist`.
 - Dates are edited and preserved in **UTC**, matching Apple's plist convention.
-- Everything runs locally in your browser — no telemetry, no uploads, works fully offline.
+- Everything runs locally in your browser — no telemetry, no uploads, works fully offline if you double click to index.html.
 
 #### 📄 [License](https://github.com/chris1111/PlistStar/blob/main/LICENSE) Copyright © 2026 **chris1111** · All Rights Reserved.
 
