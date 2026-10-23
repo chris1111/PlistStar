@@ -202,8 +202,7 @@ input[type="datetime-local"].valinput{max-width:220px}
 .tpl-logo.loading img{opacity:.15}
 .tpl-logo.loading::after{content:'';position:absolute;width:16px;height:16px;
   border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;
-  animation:rot .7s linear infinite}
-.tpl-badge{width:100%;height:100%;display:grid;place-items:center;
+  animation:rot .7s linear infinite} .tpl-badge{width:100%;height:100%;display:grid;place-items:center;
   font:700 11px var(--mono);letter-spacing:.04em}
 .tpl-badge.oc{color:var(--accent)}
 .tpl-badge.cl{color:var(--t-array)}
@@ -358,7 +357,7 @@ input[type="datetime-local"].valinput{max-width:220px}
     </div>
     <div id="treeScroll">
 
-      <!-- about card: brief description, visible on load (ⓘ toggles, × hides for the session) -->
+      <!-- about card: brief description, visible on load (ⓘ toggles, × hides — loading any plist hides it automatically) -->
       <div id="aboutCard">
         <div class="ac-head">
           <span class="ac-mark">
@@ -542,8 +541,8 @@ const ICONS = {
 const icon = (n, s=14) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
 const GH_SVG = '<svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 2.9-.39c.98 0 1.97.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .31.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>';
 document.querySelectorAll('[data-icon]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, 13)));
- $('#ghOc').innerHTML = GH_SVG;
- $('#ghClover').innerHTML = GH_SVG;
+$('#ghOc').innerHTML = GH_SVG;
+$('#ghClover').innerHTML = GH_SVG;
 
 /* ============================== plist model ============================== */
 let idSeq = 1;
@@ -830,7 +829,8 @@ function renderTree(){
   revealMode = false;
 
   $('#emptyRoot').hidden = !(doc.root.children && doc.root.children.length === 0 && !filterActive);
-  $('#erType').textContent = doc.root.type;
+  const erType = $('#erType');
+  if (erType) erType.textContent = doc.root.type;
 
   if (pendingFocus){
     const el = t.querySelector(`.row[data-id="${pendingFocus.id}"]`);
@@ -856,7 +856,6 @@ function buildRow(r){
     disc.title = 'Expand / collapse';
   } else disc.innerHTML = '<i class="leafdot"></i>';
   row.appendChild(disc);
-
   const kc = document.createElement('div');
   kc.className = 'keycell';
   for (let g = 0; g < r.depth; g++){
@@ -979,7 +978,7 @@ function updateChrome(){
     + `<span class="crumb${i === labels.length-1 ? ' current' : ''}" data-i="${i}">${escH(l)}</span>`
   ).join('') || '<span class="crumb current">Root</span>';
 }
- $('#crumbs').addEventListener('click', e => {
+$('#crumbs').addEventListener('click', e => {
   const c = e.target.closest('.crumb[data-i]');
   if (c){
     selectedId = crumbIds[+c.dataset.i];
@@ -1038,7 +1037,6 @@ function paintCode(xml, force = false){
       return;
     }
   }
-
   const cs = $('#codeScroll'), container = $('#codeLines'), st = cs.scrollTop;
   if (rows.length <= CODE_NOW || st > 40){
     container.innerHTML = rows.join('');
@@ -1142,14 +1140,14 @@ function switchTab(name){
     ensureCodeFresh();
   }
 }
- $('#tabs').addEventListener('click', e => {
+$('#tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-tab]');
   if (b) switchTab(b.dataset.tab);
 });
- $('#sourceArea').addEventListener('input', () => {
+$('#sourceArea').addEventListener('input', () => {
   sourceDirty = true; $('#btnApplySource').disabled = false;
 });
- $('#btnApplySource').addEventListener('click', () => {
+$('#btnApplySource').addEventListener('click', () => {
   try {
     const root = parsePlist($('#sourceArea').value);
     assignIds(root);
@@ -1164,6 +1162,7 @@ function switchTab(name){
     sourceDirty = false; $('#btnApplySource').disabled = true;
     lastPaintedXml = null; codeRenderedRev = -1;
     renderTree(); switchTab('source');
+    setAbout(false);   /* a plist is now in use — hide the description card */
     toast('Source applied', 'ok');
   } catch (err){
     toast(err.message, 'err');
@@ -1171,7 +1170,7 @@ function switchTab(name){
     ta.classList.add('shake'); setTimeout(() => ta.classList.remove('shake'), 400);
   }
 });
- $('#btnWrap').addEventListener('click', () => {
+$('#btnWrap').addEventListener('click', () => {
   wrapForced = true;
   setWrapUI(!$('#codeScroll').classList.contains('wrap'));
 });
@@ -1395,14 +1394,14 @@ async function loadTemplate(key){
     if (logo) logo.classList.remove('loading');
   }
 }
- $('#tplOc').addEventListener('click', () => loadTemplate('oc'));
- $('#tplClover').addEventListener('click', () => loadTemplate('clover'));
+$('#tplOc').addEventListener('click', () => loadTemplate('oc'));
+$('#tplClover').addEventListener('click', () => loadTemplate('clover'));
 
 /* ============================== about card ============================== */
 const aboutCard = $('#aboutCard');
 function setAbout(show){ aboutCard.hidden = !show; }
- $('#btnAboutClose').addEventListener('click', () => setAbout(false));
- $('#btnAbout').addEventListener('click', () => setAbout(aboutCard.hidden));
+$('#btnAboutClose').addEventListener('click', () => setAbout(false));
+$('#btnAbout').addEventListener('click', () => setAbout(aboutCard.hidden));
 
 /* ============================== new-document menu ============================== */
 const newMenu = $('#newMenu');
@@ -1417,6 +1416,7 @@ function newEmpty(){
   lastPaintedXml = null; codeRenderedRev = -1;
   pendingJump = null;
   renderTree(); switchTab('source');
+  setAbout(false);   /* a plist is now in use — hide the description card */
   toast('New document — add your first key', 'ok');
 }
 function toggleNewMenu(){
@@ -1434,7 +1434,7 @@ function toggleNewMenu(){
   } else newMenu.hidden = true;
   $('#btnNew').classList.toggle('menu-open', open);
 }
- $('#btnNew').addEventListener('click', e => { e.stopPropagation(); toggleNewMenu(); });
+$('#btnNew').addEventListener('click', e => { e.stopPropagation(); toggleNewMenu(); });
 newMenu.addEventListener('click', e => {
   const b = e.target.closest('[data-new]');
   if (!b) return;
@@ -1537,20 +1537,20 @@ tree.addEventListener('keydown', e => {
 });
 
 /* ============================== search ============================== */
- $('#search').addEventListener('input', e => { searchTerm = e.target.value; renderTree(); });
- $('#search').addEventListener('keydown', e => {
+$('#search').addEventListener('input', e => { searchTerm = e.target.value; renderTree(); });
+$('#search').addEventListener('keydown', e => {
   if (e.key === 'Escape'){ e.target.value = ''; searchTerm = ''; renderTree(); e.target.blur(); }
 });
- $('#btnClearSearch').addEventListener('click', () => {
+$('#btnClearSearch').addEventListener('click', () => {
   $('#search').value = ''; searchTerm = ''; renderTree();
 });
- $('#btnAddRoot').addEventListener('click', () => {
+$('#btnAddRoot').addEventListener('click', () => {
   const sel = rowIndex.get(selectedId);
   doAction('add', (sel && sel.node.children) ? sel : rowIndex.get(doc.root._id));
 });
- $('#btnAddFirst').addEventListener('click', () => doAction('add', rowIndex.get(doc.root._id)));
- $('#btnOpen2').addEventListener('click', () => $('#fileInput').click());
- $('#btnPasteXml').addEventListener('click', () => { switchTab('source'); $('#sourceArea').focus(); });
+$('#btnAddFirst').addEventListener('click', () => doAction('add', rowIndex.get(doc.root._id)));
+$('#btnOpen2').addEventListener('click', () => $('#fileInput').click());
+$('#btnPasteXml').addEventListener('click', () => { switchTab('source'); $('#sourceArea').focus(); });
 
 /* ============================== document actions ============================== */
 function freshDoc(){
@@ -1577,6 +1577,7 @@ function loadFromText(text, opts = {}){
     pendingJump = null;
     if (opts.reveal) revealMode = true;
     renderTree(); switchTab('source');
+    setAbout(false);   /* a plist is now in use — hide the description card (ⓘ brings it back) */
     if (opts.toast !== false) toast(`Loaded ${doc.name}`, 'ok');
   } catch (err){
     toast('Could not parse: ' + err.message, 'err');
@@ -1604,11 +1605,11 @@ async function copyXML(){
     toast('XML copied to clipboard', 'ok');
   }
 }
- $('#btnExport').addEventListener('click', doExport);
- $('#btnCopy').addEventListener('click', copyXML);
- $('#btnCopyCode').addEventListener('click', copyXML);
- $('#btnOpen').addEventListener('click', () => $('#fileInput').click());
- $('#fileInput').addEventListener('change', async e => {
+$('#btnExport').addEventListener('click', doExport);
+$('#btnCopy').addEventListener('click', copyXML);
+$('#btnCopyCode').addEventListener('click', copyXML);
+$('#btnOpen').addEventListener('click', () => $('#fileInput').click());
+$('#fileInput').addEventListener('change', async e => {
   const f = e.target.files[0]; if (!f) return;
   loadFromText(await f.text(), { name: f.name, reveal:true });
   e.target.value = '';
@@ -1637,7 +1638,7 @@ function togglePane(){
     else if (pendingJump && !sourceDirty){ performJump(pendingJump); pendingJump = null; }
   }
 }
- $('#btnPane').addEventListener('click', togglePane);
+$('#btnPane').addEventListener('click', togglePane);
 
 const divider = $('#divider');
 let dragging = false;
